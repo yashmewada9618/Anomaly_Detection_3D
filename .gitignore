@@ -1,0 +1,8 @@
+pretrained_dataset/
+__MACOSX/
+__pycache__/
+ModelNet10/
+ModelNet10.zip
+imgui.ini
+.polyscope.ini
+.vscode/
