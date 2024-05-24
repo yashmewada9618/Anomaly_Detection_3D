@@ -6,3 +6,10 @@ ModelNet10.zip
 imgui.ini
 .polyscope.ini
 .vscode/
+MVTec
+
+mvtec*
+*.zip
+*.tar.xz
+*.tar
+*.pth
