@@ -3,6 +3,7 @@ from model.decoder import DecoderNetwork
 from loss.loss import ChampherLoss
 import torch
 import matplotlib.pyplot as plt
+import open3d as o3d
 from tqdm import tqdm
 from dataloader.dataloader import ModelNet10
 from torch.cuda.amp import GradScaler, autocast
@@ -12,6 +13,7 @@ from utils.utils import (
     knn,
     compute_scaling_factor,
     get_two_layer_knn,
+    calculate_scaling_factor,
 )
 
 """
@@ -44,19 +46,14 @@ def train(
     scaler = GradScaler()
 
     ######### For Normalization #########
-    s_factor = 8.904362992404094
+    print(f"[+] Pointcloud size: {training_dataset.dataset[0].size()}")
     count = 0
-    s_factor = 0
+    s_factor = 0.0
     for item in tqdm(training_dataset):
         item = item.to(device)
-        # uniformly sample 8000 points from the point cloud
-        temp_indices = torch.randperm(item.size(1))[:11000]
-        item = item[:, temp_indices, :]
         s_factor += compute_scaling_factor(item, k)
-        count += 1
-    s_factor /= count * k
     print(f"[+] S Factor: {s_factor}")
-    with open("s_factor.txt", "w") as f:
+    with open(f"s_factors/s_factor_{exp_name}.txt", "w") as f:
         f.write(str(s_factor))
 
     best_val_loss = float("inf")
@@ -71,13 +68,8 @@ def train(
         epoch_loss = 0.0
 
         for item in tqdm(training_dataset):
-
             optimizer.zero_grad()
             item = item.to(device) / s_factor
-
-            # uniformly sample 8000 points from the point cloud
-            temp_indices = torch.randperm(item.size(1))[:11000]
-            item = item[:, temp_indices, :]
             B, N, D = item.size()
 
             with autocast():
@@ -95,16 +87,15 @@ def train(
                     k1=8,
                     k2=8,
                     sampled_indices=sampled_indices,
-                    batch_size=128,
+                    batch_size=item.size(1),
                 ).to(device)
 
-                loss = ChampherLoss()(norm_recep_fields, decoder_out)
-
+            loss = ChampherLoss()(norm_recep_fields, decoder_out)
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
 
-            epoch_loss += loss.item()
+            epoch_loss += scaler.scale(loss).item()
 
         epoch_loss /= len(training_dataset)
         loss_values.append(epoch_loss)
@@ -131,7 +122,7 @@ def train(
                     k1=8,
                     k2=8,
                     sampled_indices=val_sampled_indices,
-                    batch_size=128,
+                    batch_size=item.size(1),
                 ).to(device)
 
                 val_loss += ChampherLoss()(
@@ -157,6 +148,7 @@ def train(
 
     writer.close()
 
+    # Plot the losses
     plt.plot(loss_values, label="Training Loss")
     plt.plot(val_losses, label="Validation Loss")
     plt.xlabel("Epochs")
@@ -172,18 +164,16 @@ if __name__ == "__main__":
     weight_decay = 1e-6
     k = 8
     batch_size = 1
-    exp_name = "exp4"
+    exp_name = "exp5"
 
     # Load the dataset
-    root_path = (
-        "/home/mewada/Anomaly_Detection_3D/dataset_generation/pretrained_dataset/"
-    )
+    root_path = "datasets/pretrained_dataset/"
     train_ = ModelNet10("train", scale=1, root_dir=root_path)
     train_dataset = torch.utils.data.DataLoader(
         train_, batch_size=batch_size, pin_memory=True, shuffle=True
     )
     val_ = ModelNet10("val", scale=1, root_dir=root_path)
     val_dataset = torch.utils.data.DataLoader(
-        train_, batch_size=batch_size, pin_memory=True, shuffle=False
+        val_, batch_size=batch_size, pin_memory=True, shuffle=False
     )
     train(train_dataset, val_dataset, f_dim, exp_name, num_epochs, lr, weight_decay, k)

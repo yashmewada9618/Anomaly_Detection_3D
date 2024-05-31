@@ -113,7 +113,7 @@ def mesh2pointcloud(mesh, mesh_file, uniform=True):
         else open3d_mesh.sample_points_poisson_disk(number_of_points=5500)
     )
     fps_points = farthest_point_sampling(pcd.points, 16000, pcd_file_path)
-    o3d.io.write_point_cloud(pcd_file_path, pcd)
+    # o3d.io.write_point_cloud(pcd_file_path, pcd)
 
     return fps_points
 
@@ -162,10 +162,16 @@ def save_point_clouds(pcds, path):
 
 
 def main():
-    base_dir = "/home/mewada/Anomaly_Detection_3D/ModelNet10/"  # Path to the ModelNet10 directory
-    path_to_output_scene = "/home/mewada/Anomaly_Detection_3D/dataset_generation/pretrained_dataset/Scenes/"  # Path to save the transformed models
-    path_to_train_pcds = "/home/mewada/Anomaly_Detection_3D/dataset_generation/pretrained_dataset/train/"  # Path to save the train point clouds
-    path_to_val_pcds = "/home/mewada/Anomaly_Detection_3D/dataset_generation/pretrained_dataset/val/"  # Path to save the validation point clouds
+    base_dir = "datasets/ModelNet10/"  # Path to the ModelNet10 directory
+    path_to_output_scene = (
+        "datasets/pretrained_dataset/Scenes/"  # Path to save the transformed models
+    )
+    path_to_train_pcds = (
+        "datasets/pretrained_dataset/train/"  # Path to save the train point clouds
+    )
+    path_to_val_pcds = (
+        "datasets/pretrained_dataset/val/"  # Path to save the validation point clouds
+    )
     models = load_modelnet10_models(base_dir)
 
     # Randomly select 10 models

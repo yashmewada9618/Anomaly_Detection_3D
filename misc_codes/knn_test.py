@@ -1,6 +1,7 @@
 import numpy as np
 from sklearn.neighbors import NearestNeighbors
 import torch
+import open3d as o3d
 
 
 def compute_knn_graph(points, k):
@@ -162,11 +163,11 @@ def get_two_layer_knn(points, num_samples, k1, k2, batch_size=50):
         second_layer_neighbors_list = second_layer_neighbors_list.reshape(-1)
         second_layer_points = points[:, second_layer_neighbors_list]
 
-        # Normalize by subtracting the mean of the receptive field
-        mean_point = torch.mean(second_layer_points, dim=0)
-        normalized_receptive_field = second_layer_points - mean_point
+        output[i] = second_layer_points
 
-        output[i] = normalized_receptive_field
+    # Normalize by subtracting the mean of the receptive field
+    mean_points = output.mean(dim=2, keepdim=True)
+    output -= mean_points
 
     return output
 
@@ -174,13 +175,17 @@ def get_two_layer_knn(points, num_samples, k1, k2, batch_size=50):
 # Example usage
 if __name__ == "__main__":
     # Generate some random points (for example, 4000 points in 3D space)
-    num_points = 1024
-    point_dim = 3
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    points = torch.tensor(np.random.rand(num_points, point_dim)).to(device)
+    pcd = o3d.io.read_point_cloud("datasets/pretrained_dataset/train/bed_0254_1.pcd")
+    pcd.points = o3d.utility.Vector3dVector(np.asarray(pcd.points))
+    o3d.visualization.draw_geometries([pcd])
+
+    points = torch.tensor(np.asarray(pcd.points))
+
+    points = points.to(device)
     points = points.unsqueeze(0)  # Add a batch dimension
-    print("Points:", points.shape)
+    print("Points:", points)
 
     # k = 8  # Number of nearest neighbors to compute
     # _, knn_indices, knn_distances = knn(points, k, 128)
@@ -188,5 +193,10 @@ if __name__ == "__main__":
     # # Print the results
     # print("k-NN Indices:\n", knn_indices[0])
     print("Points shape:", points.shape)
-    output = get_two_layer_knn(points, num_samples=16, k1=8, k2=8, batch_size=128)
-    print("Output shape:", output.shape)
+    output = get_two_layer_knn(points, num_samples=28, k1=8, k2=8, batch_size=128)
+    print("Output shape:", output)
+
+    # Visualize the receptive fields points
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(output[0].cpu().numpy())
+    o3d.visualization.draw_geometries([pcd])

@@ -7,6 +7,7 @@ import torch
 from tqdm import tqdm
 import numpy as np
 from scipy.spatial import distance
+from scipy.spatial import KDTree
 
 
 def knn_function(points, k):
@@ -70,6 +71,7 @@ def knn(points, k, batch_size=50):
         batch_knn_dists = batch_knn_dists[
             :, 1:
         ]  # Exclude the first distance (distance to itself)
+
         batch_knn_indices = batch_knn_indices[
             :, 1:
         ]  # Exclude the first index (distance to itself)
@@ -135,11 +137,11 @@ def get_two_layer_knn(points, num_samples, k1, k2, sampled_indices, batch_size=5
         second_layer_neighbors_list = second_layer_neighbors_list.reshape(-1)
         second_layer_points = points[:, second_layer_neighbors_list]
 
-        # Normalize by subtracting the mean of the receptive field
-        mean_point = torch.mean(second_layer_points, dim=0)
-        normalized_receptive_field = second_layer_points - mean_point
+        output[0][i] = second_layer_points
 
-        output[0][i] = normalized_receptive_field
+    # Normalize the output by subtracting the mean
+    mean_points = output.mean(dim=2, keepdim=True)
+    output -= mean_points
 
     return output
 
@@ -222,6 +224,31 @@ def compute_s_value(all_data, knn_points, knn_indices, k):
     return s
 
 
+def calculate_scaling_factor(pointcloud, k=8):
+    # Create a KDTree for fast nearest neighbor search
+    # tree = KDTree(pointcloud)
+
+    total_distance = 0
+    total_points = pointcloud.shape[1]
+    print(pointcloud.shape)
+
+    for point in pointcloud:
+        # Find k nearest neighbors (including the point itself)
+        point = point.unsqueeze(0)
+        print(point.shape)
+        _, _, distances = knn(point, k)
+        # Exclude the first point as it is the point itself (distance 0)
+        distances = distances[1:]
+
+        # Sum the distances for this point
+        total_distance += np.sum(distances)
+
+    # Calculate the scaling factor
+    scaling_factor = total_distance / (k * total_points)
+
+    return scaling_factor
+
+
 def compute_scaling_factor(point_cloud, k):
     """
     Calculate the scaling factor s for normalizing the point cloud.
@@ -236,14 +263,11 @@ def compute_scaling_factor(point_cloud, k):
     """
     _, _, distances = knn(point_cloud, k)
 
-    # Exclude the first nearest neighbor (the point itself)
-    distances = distances[:, 1:]
-
     # Compute the average distance over all points and their k-nearest neighbors
-    avg_distance = torch.mean(distances).item()
+    avg_distance = torch.sum(distances).item()
 
     # Calculate the scaling factor
-    s = 1 / avg_distance
+    s = avg_distance / (k * point_cloud.shape[1])
 
     return s
 

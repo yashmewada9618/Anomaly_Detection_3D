@@ -41,23 +41,38 @@ class MvTec3D(BaseDataLoader):
 
 class MVTec3DDataset(Dataset):
     def __init__(self, base_dir, split, num_points=16000, resize_shape=(400, 400, 3)):
+        """
+        Initializes the MVTec 3D dataset.
+
+        Args:
+            base_dir (str): Base directory containing the dataset.
+            split (str): Dataset split to use (e.g., 'train', 'test').
+            num_points (int): Number of points to sample from the point cloud.
+            resize_shape (tuple): Desired shape to resize the images.
+        """
         self.base_dir = base_dir
         self.split = split
         self.num_points = num_points
         self.resize_shape = resize_shape
-        self.tiff_files = []
+        self.tiff_files = self._collect_tiff_files()
 
-        # Collect all tiff files from all categories
-        for category in os.listdir(base_dir):
-            xyz_dir = os.path.join(base_dir, category, split, "good", "xyz")
+    def _collect_tiff_files(self):
+        """
+        Collects all .tiff files from the dataset directory.
+
+        Returns:
+            list: List of file paths to .tiff files.
+        """
+        tiff_files = []
+        for category in os.listdir(self.base_dir):
+            xyz_dir = os.path.join(self.base_dir, category, self.split, "good", "xyz")
             if os.path.isdir(xyz_dir):
-                self.tiff_files.extend(
-                    [
-                        os.path.join(xyz_dir, f)
-                        for f in os.listdir(xyz_dir)
-                        if f.endswith(".tiff")
-                    ]
+                tiff_files.extend(
+                    os.path.join(xyz_dir, f)
+                    for f in os.listdir(xyz_dir)
+                    if f.endswith(".tiff")
                 )
+        return tiff_files
 
     def __len__(self):
         return len(self.tiff_files)

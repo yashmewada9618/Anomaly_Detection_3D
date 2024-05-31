@@ -80,11 +80,10 @@ class AnomalyScoreLoss(nn.Module):
         Returns:
         - dist: Chamfer distance between the point clouds.
         """
-        # diff = teacher_features - student_features
 
-        # return torch.mean(torch.sum(diff**2, dim=1)) / teacher_features.shape[1]
+        # return (
+        #     torch.norm(teacher_features - student_features, dim=1).sum()
+        #     / teacher_features.shape[1]
+        # )
 
-        return (
-            torch.norm(teacher_features - student_features, dim=1).sum()
-            / teacher_features.shape[1]
-        )
+        return F.mse_loss(teacher_features, student_features)

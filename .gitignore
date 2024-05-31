@@ -6,6 +6,7 @@ imgui.ini
 .polyscope.ini
 .vscode/
 datasets/
+pretrained_datasets/
 
 mvtec*
 *.zip
