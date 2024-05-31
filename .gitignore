@@ -5,7 +5,6 @@ ModelNet10.zip
 imgui.ini
 .polyscope.ini
 .vscode/
-MVTec
 datasets/
 
 mvtec*
