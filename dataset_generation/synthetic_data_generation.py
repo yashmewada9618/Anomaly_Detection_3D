@@ -6,7 +6,7 @@ import random
 import numpy as np
 import pymeshlab
 import open3d as o3d
-
+from tqdm import tqdm
 
 """
 Author: Yash Mewada
@@ -112,7 +112,7 @@ def mesh2pointcloud(mesh, mesh_file, uniform=True):
         if uniform
         else open3d_mesh.sample_points_poisson_disk(number_of_points=5500)
     )
-    fps_points = farthest_point_sampling(pcd.points, 2048, pcd_file_path)
+    fps_points = farthest_point_sampling(pcd.points, 16000, pcd_file_path)
     o3d.io.write_point_cloud(pcd_file_path, pcd)
 
     return fps_points
@@ -163,33 +163,27 @@ def save_point_clouds(pcds, path):
 
 def main():
     base_dir = "/home/mewada/Anomaly_Detection_3D/ModelNet10/"  # Path to the ModelNet10 directory
-    path_to_output_scene = (
-        "pretrained_dataset/Scenes/"  # Path to save the transformed models
-    )
-    path_to_train_pcds = (
-        "pretrained_dataset/train/"  # Path to save the train point clouds
-    )
-    path_to_val_pcds = (
-        "pretrained_dataset/val/"  # Path to save the validation point clouds
-    )
+    path_to_output_scene = "/home/mewada/Anomaly_Detection_3D/dataset_generation/pretrained_dataset/Scenes/"  # Path to save the transformed models
+    path_to_train_pcds = "/home/mewada/Anomaly_Detection_3D/dataset_generation/pretrained_dataset/train/"  # Path to save the train point clouds
+    path_to_val_pcds = "/home/mewada/Anomaly_Detection_3D/dataset_generation/pretrained_dataset/val/"  # Path to save the validation point clouds
     models = load_modelnet10_models(base_dir)
 
     # Randomly select 10 models
-    selected_models = random.sample(models, 5)
+    selected_models = random.sample(models, 10)
     train_point_clouds = []
     val_point_clouds = []
 
     num_train_pcds = 500
-    num_val_pcds = 25
+    num_val_pcds = 30
 
     print(num_train_pcds // len(selected_models))
     # Load, scale and save the selected models
-    for model_path in selected_models:
-        print(f"[+] Loading {model_path.split('/')[-1]}")
+    for model_path in tqdm(selected_models):
+        # print(f"[+] Loading {model_path.split('/')[-1]}")
         scaled_mesh = scale_to_unit_bbox(model_path)
 
         # Generate 500 train point clouds
-        for k in range(num_train_pcds // len(selected_models)):
+        for _ in tqdm(range(num_train_pcds // len(selected_models))):
             scaled_rotated_mesh = rotate_mesh(scaled_mesh)
             transformed_mesh = translate_mesh(scaled_rotated_mesh)
             filename = (
@@ -197,19 +191,19 @@ def main():
             )
             transformed_mesh.save_current_mesh(filename)
             pcd = mesh2pointcloud(transformed_mesh, filename, uniform=True)
-            print(
-                f"[+] Tranformed and generated train point cloud {os.path.basename(model_path)}_{k}"
-            )
+            # print(
+            #     f"[+] Tranformed and generated train point cloud {os.path.basename(model_path)}_{k}"
+            # )
             train_point_clouds.append(pcd)
 
         save_point_clouds(
             train_point_clouds,
             f"{path_to_train_pcds}{os.path.basename(model_path).replace('.off', '')}",
         )
-        print(f"[+] Saved {num_train_pcds} train point clouds")
+        # print(f"[+] Saved {num_train_pcds} train point clouds")
 
         # Generate 25 validation point clouds
-        for l in range(num_val_pcds // len(selected_models)):
+        for _ in tqdm(range(num_val_pcds // len(selected_models))):
             scaled_rotated_mesh = rotate_mesh(scaled_mesh)
             transformed_mesh = translate_mesh(scaled_rotated_mesh)
             filename = (
@@ -217,21 +211,23 @@ def main():
             )
             transformed_mesh.save_current_mesh(filename)
             pcd = mesh2pointcloud(transformed_mesh, filename, uniform=True)
-            print(
-                f"[+] Tranformed and generated val point cloud {os.path.basename(model_path)}_{l}"
-            )
+            # print(
+            #     f"[+] Tranformed and generated val point cloud {os.path.basename(model_path)}_{l}"
+            # )
             val_point_clouds.append(pcd)
 
         save_point_clouds(
             val_point_clouds,
             f"{path_to_val_pcds}{os.path.basename(model_path).replace('.off', '')}",
         )
-        print(f"[+] Saved {num_val_pcds} validation point clouds")
+        # print(f"[+] Saved {num_val_pcds} validation point clouds")
 
         train_point_clouds = []
         val_point_clouds = []
         # print(f"[+] Saved {filename}")
         print()
+
+    print("[+] Synthetic Data Generation Completed")
 
 
 if __name__ == "__main__":

@@ -37,26 +37,15 @@ from model.teacher import SharedMLP
 
 
 class DecoderNetwork(BaseModel):
-    def __init__(self, input_dim=64, hidden_dim=128, output_dim=1024) -> None:
+    def __init__(self, input_dim, hidden_dim=128, output_dim=1024):
         super(DecoderNetwork, self).__init__()
-        self.output_dim = output_dim
-        self.input_layer = SharedMLP(input_dim, hidden_dim)
-        self.hidden_1 = nn.Sequential(
-            *[
-                nn.Linear(hidden_dim, hidden_dim),
-                nn.LeakyReLU(0.05),
-            ]
+        self.mlp = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.LeakyReLU(negative_slope=0.05),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.LeakyReLU(negative_slope=0.05),
+            nn.Linear(hidden_dim, output_dim * 3),
         )
-        self.hidden_2 = nn.Sequential(
-            *[
-                nn.Linear(hidden_dim, hidden_dim),
-                nn.LeakyReLU(0.05),
-            ]
-        )
-        self.output_layer = nn.Linear(hidden_dim, output_dim * 3)
 
-    def forward(self, point_features: torch.Tensor) -> torch.Tensor:
-        x = self.input_layer(point_features)
-        x = self.hidden_1(x)
-        x = self.hidden_2(x)
-        return self.output_layer(x).reshape(-1, self.output_dim, 3)
+    def forward(self, x):
+        return self.mlp(x)

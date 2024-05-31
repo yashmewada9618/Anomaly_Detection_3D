@@ -1,4 +1,3 @@
-pretrained_dataset/
 __MACOSX/
 __pycache__/
 ModelNet10/
@@ -7,6 +6,7 @@ imgui.ini
 .polyscope.ini
 .vscode/
 MVTec
+datasets/
 
 mvtec*
 *.zip
