@@ -74,18 +74,15 @@ def train(
             temp_indices = torch.randperm(item.size(1))[:5000]
             item = item[:, temp_indices, :]
             optimizer.zero_grad()
+            knn_points, indices, _ = knn(item, k)
+            geom_feat = compute_geometric_data(item, knn_points)
+            teacher_out = teacher(item, geom_feat, indices)
+            student_out = student(item, geom_feat, indices)
+            norm_teacher = (teacher_out - mu) / sigma
+            loss = AnomalyScoreLoss()(norm_teacher, student_out)
 
-            with autocast():
-                knn_points, indices, distances = knn(item, k)
-                geom_feat = compute_geometric_data(item, knn_points)
-                teacher_out = teacher(item, geom_feat, indices)
-                student_out = student(item, geom_feat, indices)
-                norm_teacher = (teacher_out - mu) / sigma
-                loss = AnomalyScoreLoss()(norm_teacher, student_out)
-
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
+            loss.backward()
+            optimizer.step()
             torch.nn.utils.clip_grad_norm_(student.parameters(), max_norm=1.0)
             epoch_loss += loss.item()
 
@@ -101,7 +98,7 @@ def train(
                 item = item.to(device) / s_factor
                 temp_indices = torch.randperm(item.size(1))[:5000]
                 item = item[:, temp_indices, :]
-                knn_points, indices, distances = knn(item, k)
+                knn_points, indices, _ = knn(item, k)
                 geom_feat = compute_geometric_data(item, knn_points)
                 teacher_out = teacher(item, geom_feat, indices)
                 student_out = student(item, geom_feat, indices)
