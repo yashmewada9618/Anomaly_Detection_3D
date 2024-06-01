@@ -25,23 +25,8 @@ from utils.utils import (
     compute_local_receptive_field,
     compute_receptive_field_1,
     get_avg_distance,
+    get_params,
 )
-
-
-def get_params(teacher_model, train_data_loader, s):
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    teacher_model.eval()
-    features = []
-    chunk_size = 1024
-    with torch.no_grad():
-        for item in tqdm(train_data_loader):
-            item = item.to(device) / s
-            knn_points, indices, distances = knn(item, k)
-            geom_feat = compute_geometric_data(item, knn_points, distances)
-            teacher_out = teacher_model(item, geom_feat, indices)
-            features.append(teacher_out)
-    features = torch.cat(features, dim=0)
-    return features.mean(dim=0), features.std(dim=0)
 
 
 def train(
@@ -50,9 +35,9 @@ def train(
     validation_dataset,
     f_dim,
     exp_name,
-    num_epochs=250,
+    num_epochs=100,
     lr=1e-3,
-    weight_decay=1e-6,
+    weight_decay=1e-5,
     k=8,
 ):
 
@@ -78,17 +63,17 @@ def train(
         weight_decay=weight_decay,
     )
     ######### For Normalization #########
-    s_factor = 19.104289397122123
-    count = 0
-    s_factor = 0
-    for item in tqdm(training_dataset):
-        item = item.to(device)
-        s_factor += compute_scaling_factor(item, k)
-        count += 1
-    s_factor /= count
+    s_factor = 7.461985209083554 / len(training_dataset)
+    # count = 0
+    # s_factor = 0
+    # for item in tqdm(training_dataset):
+    #     item = item.to(device)
+    #     s_factor += compute_scaling_factor(item, k)
+    #     count += 1
+    # # s_factor /= count
     print(f"[+] S Factor: {s_factor}")
-    with open("s_factor_mvtec3d.txt", "w") as f:
-        f.write(str(s_factor))
+    # with open("s_factor_mvtec3d.txt", "w") as f:
+    #     f.write(str(s_factor))
 
     best_val_loss = float("inf")
     losses = []
@@ -97,8 +82,8 @@ def train(
     # np.save(f"weights/{exp_name}_mu_1024.npy", mu.cpu().numpy())
     # np.save(f"weights/{exp_name}_sigma_1024.npy", sigma.cpu().numpy())
 
-    mu = torch.tensor(np.load(f"s_factors/{exp_name}_mu_1024.npy")).to(device)
-    sigma = torch.tensor(np.load(f"s_factors/{exp_name}_sigma_1024.npy")).to(device)
+    mu = torch.tensor(np.load(f"weights/{exp_name}_mu_1024.npy")).to(device)
+    sigma = torch.tensor(np.load(f"weights/{exp_name}_sigma_1024.npy")).to(device)
     # print(f"[+] Mean: {mu}, Sigma: {sigma}")
     count = 0
     for epoch in tqdm(range(num_epochs)):
@@ -110,18 +95,17 @@ def train(
             item = item.to(device)
             optimizer.zero_grad()
             knn_points, indices, distances = knn(item, k)
-            geom_feat = compute_geometric_data(item, knn_points, distances)
+            geom_feat = compute_geometric_data(item, knn_points)
             teacher_out = teacher(item, geom_feat, indices)
             student_out = student(item, geom_feat, indices)
-            print(f"Teacher: {indices}")
 
             norm_teacher = (teacher_out - mu) / sigma
             # norm_teacher = teacher_out
             loss = AnomalyScoreLoss()(norm_teacher, student_out)
             # print(f"Loss: {teacher_out}")
             # print(f" MSE loss: {student_out}")
-            loss1 = F.mse_loss(norm_teacher, student_out)
-            print(f"Loss: {loss.item()}, MSE loss: {loss1.item()}")
+            # loss1 = F.mse_loss(norm_teacher, student_out)
+            # print(f"Loss: {loss.item()}, MSE loss: {loss1.item()}")
             loss.backward()
             optimizer.step()
 
@@ -138,7 +122,7 @@ def train(
             for item in validation_dataset:
                 item = item.to(device) / s_factor
                 knn_points, indices, distances = knn(item, k)
-                geom_feat = compute_geometric_data(item, knn_points, distances)
+                geom_feat = compute_geometric_data(item, knn_points)
                 teacher_out = teacher(item, geom_feat, indices)
                 student_out = student(item, geom_feat, indices)
                 norm_teacher = (teacher_out - mu) / sigma
@@ -172,16 +156,16 @@ def train(
 
 if __name__ == "__main__":
     f_dim = 64
-    num_epochs = 100
+    num_epochs = 10
     lr = 1e-3
     weight_decay = 1e-5
     k = 8
     batch_size = 1
-    exp_name = "exp_student_v2_t1"
+    exp_name = "exp_student_v2_t0"
 
     # root_path = "/home/mewada/pivot_submission/Anomaly_Detection_3D/datasets/mvtec_point_clouds/"
     root_path = "datasets/MvTec_3D/"
-    pretrained_teacher_path = "weights/exp4.pt"
+    pretrained_teacher_path = "weights/exp0.pt"
 
     # train_ = MvTec3D("train", scale=1, root_dir=root_path)
     # train_dataloader = torch.utils.data.DataLoader(
@@ -192,9 +176,9 @@ if __name__ == "__main__":
     #     train_, batch_size=batch_size, pin_memory=True, shuffle=True
     # )
 
-    train_dataset = MVTec3DDataset(num_points=1024, base_dir=root_path, split="train")
+    train_dataset = MVTec3DDataset(num_points=4000, base_dir=root_path, split="train")
     val_dataset = MVTec3DDataset(
-        num_points=1024, base_dir=root_path, split="validation"
+        num_points=4000, base_dir=root_path, split="validation"
     )
     train_dataloader = torch.utils.data.DataLoader(
         train_dataset, batch_size=batch_size, shuffle=True

@@ -11,22 +11,7 @@ from loss.loss import AnomalyScoreLoss
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from dataloader.dataloader import MVTec3DDataset
-from utils.utils import compute_geometric_data, compute_scaling_factor, knn
-
-
-def get_params(teacher_model, train_data_loader, s, k):
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    teacher_model.eval()
-    features = []
-    with torch.no_grad():
-        for item in tqdm(train_data_loader):
-            item = item.to(device) / s
-            knn_points, indices, distances = knn(item, k)
-            geom_feat = compute_geometric_data(item, knn_points, distances)
-            teacher_out = teacher_model(item, geom_feat, indices)
-            features.append(teacher_out)
-    features = torch.cat(features, dim=0)
-    return features.mean(dim=0), features.std(dim=0)
+from utils.utils import compute_geometric_data, compute_scaling_factor, knn, get_params
 
 
 def train(
@@ -50,7 +35,6 @@ def train(
     student.apply(
         lambda m: m.reset_parameters() if hasattr(m, "reset_parameters") else None
     )
-
     if os.path.exists(pretrained_teacher_path):
         teacher.load_state_dict(torch.load(pretrained_teacher_path)["teacher"])
         print(f"[+] Loaded pretrained teacher model from {pretrained_teacher_path}")
@@ -62,20 +46,23 @@ def train(
     optimizer = torch.optim.Adam(student.parameters(), lr=lr, weight_decay=weight_decay)
     scaler = GradScaler()
 
-    # For Normalization
+    ######### For Normalization #########
     s_factor = sum(
-        compute_scaling_factor(item.to(device), k) for item in tqdm(training_dataset)
+        compute_scaling_factor(
+            item[:, torch.randperm(item.size(1))[:5000], :].to(device), k
+        )
+        for item in tqdm(training_dataset)
     ) / len(training_dataset)
     print(f"[+] S Factor: {s_factor}")
-    with open("s_factor_mvtec3d.txt", "w") as f:
+    with open(f"s_factors/s_factor_{exp_name}.txt", "w") as f:
         f.write(str(s_factor))
 
     best_val_loss = float("inf")
     losses = []
 
-    mu, sigma = get_params(teacher, training_dataset, s_factor, k)
-    np.save(f"weights/{exp_name}_mu.npy", mu.cpu().numpy())
-    np.save(f"weights/{exp_name}_sigma.npy", sigma.cpu().numpy())
+    mu, sigma = get_params(teacher, training_dataset, s_factor)
+    np.save(f"s_factors/{exp_name}_mu.npy", mu.cpu().numpy())
+    np.save(f"s_factors/{exp_name}_sigma.npy", sigma.cpu().numpy())
 
     for epoch in tqdm(range(num_epochs)):
         epoch_loss = 0.0
@@ -84,11 +71,13 @@ def train(
 
         for item in tqdm(training_dataset):
             item = item.to(device) / s_factor
+            temp_indices = torch.randperm(item.size(1))[:5000]
+            item = item[:, temp_indices, :]
             optimizer.zero_grad()
 
             with autocast():
                 knn_points, indices, distances = knn(item, k)
-                geom_feat = compute_geometric_data(item, knn_points, distances)
+                geom_feat = compute_geometric_data(item, knn_points)
                 teacher_out = teacher(item, geom_feat, indices)
                 student_out = student(item, geom_feat, indices)
                 norm_teacher = (teacher_out - mu) / sigma
@@ -110,8 +99,10 @@ def train(
         with torch.no_grad():
             for item in validation_dataset:
                 item = item.to(device) / s_factor
+                temp_indices = torch.randperm(item.size(1))[:5000]
+                item = item[:, temp_indices, :]
                 knn_points, indices, distances = knn(item, k)
-                geom_feat = compute_geometric_data(item, knn_points, distances)
+                geom_feat = compute_geometric_data(item, knn_points)
                 teacher_out = teacher(item, geom_feat, indices)
                 student_out = student(item, geom_feat, indices)
                 norm_teacher = (teacher_out - mu) / sigma
@@ -137,7 +128,7 @@ def train(
     plt.title("Training Loss for Student Model")
     plt.xlabel("Epochs")
     plt.ylabel("Loss")
-    plt.savefig(f"{exp_name}.png")
+    plt.savefig(f"runs/{exp_name}/student_loss.png")
     plt.show()
 
 
@@ -148,10 +139,10 @@ if __name__ == "__main__":
     weight_decay = 1e-5
     k = 8
     batch_size = 1
-    exp_name = "exp_student_v2_t1"
+    exp_name = "test_student1"
 
     root_path = "datasets/MvTec_3D/"
-    pretrained_teacher_path = "weights/exp4.pt"
+    pretrained_teacher_path = "weights/test_pretrain1.pt"
 
     train_dataset = MVTec3DDataset(num_points=16000, base_dir=root_path, split="train")
     val_dataset = MVTec3DDataset(
@@ -167,14 +158,14 @@ if __name__ == "__main__":
     print(f"[+] Training on {len(train_dataset)} samples")
     print(f"[+] Validating on {len(val_dataset)} samples")
 
-    # train(
-    #     pretrained_teacher_path,
-    #     train_dataloader,
-    #     val_dataloader,
-    #     f_dim,
-    #     exp_name,
-    #     num_epochs,
-    #     lr,
-    #     weight_decay,
-    #     k,
-    # )
+    train(
+        pretrained_teacher_path,
+        train_dataloader,
+        val_dataloader,
+        f_dim,
+        exp_name,
+        num_epochs,
+        lr,
+        weight_decay,
+        k,
+    )

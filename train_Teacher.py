@@ -12,8 +12,7 @@ from utils.utils import (
     compute_geometric_data,
     knn,
     compute_scaling_factor,
-    get_two_layer_knn,
-    calculate_scaling_factor,
+    get_receptive_fields,
 )
 
 """
@@ -33,6 +32,7 @@ def train(
     k=8,
 ):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    print(f"[+] Device: {device}")
     torch.cuda.empty_cache()
 
     teacher = TeacherModel(feature_dim=f_dim).to(device)
@@ -47,11 +47,12 @@ def train(
 
     ######### For Normalization #########
     print(f"[+] Pointcloud size: {training_dataset.dataset[0].size()}")
-    count = 0
-    s_factor = 0.0
-    for item in tqdm(training_dataset):
-        item = item.to(device)
-        s_factor += compute_scaling_factor(item, k)
+    s_factor = sum(
+        compute_scaling_factor(
+            item[:, torch.randperm(item.size(1))[:5000], :].to(device), k
+        )
+        for item in tqdm(training_dataset)
+    ) / len(training_dataset)
     print(f"[+] S Factor: {s_factor}")
     with open(f"s_factors/s_factor_{exp_name}.txt", "w") as f:
         f.write(str(s_factor))
@@ -70,32 +71,34 @@ def train(
         for item in tqdm(training_dataset):
             optimizer.zero_grad()
             item = item.to(device) / s_factor
+
+            # randomly sample 8000 points from the point cloud
+            temp_indices = torch.randperm(item.size(1))[:5000]
+            item = item[:, temp_indices, :]
             B, N, D = item.size()
 
-            with autocast():
-                knn_points, indices, distances = knn(item, k, batch_size=item.size(1))
-                geom_feat = compute_geometric_data(item, knn_points, distances)
-                teacher_out = teacher(item, geom_feat, indices)
-
-                # Randomly sample points
-                sampled_indices = torch.randperm(N)[:16].to(device)
-                sampled_features = teacher_out[:, sampled_indices, :]
-                decoder_out = decoder(sampled_features).unsqueeze(0)
-                norm_recep_fields = get_two_layer_knn(
-                    item,
-                    num_samples=16,
-                    k1=8,
-                    k2=8,
-                    sampled_indices=sampled_indices,
-                    batch_size=item.size(1),
-                ).to(device)
-
+            # with autocast():
+            knn_points, indices, distances = knn(item, k, batch_size=item.size(1))
+            geom_feat = compute_geometric_data(item, knn_points)
+            teacher_out = teacher(item, geom_feat, indices)
+            # Randomly sample points
+            sampled_indices = torch.randperm(N)[:16].to(device)
+            sampled_features = teacher_out[:, sampled_indices, :]
+            decoder_out = decoder(sampled_features).unsqueeze(0)
+            norm_recep_fields = get_receptive_fields(
+                item,
+                num_samples=16,
+                k1=8,
+                k2=8,
+                sampled_indices=sampled_indices,
+                batch_size=item.size(1),
+            ).to(device)
             loss = ChampherLoss()(norm_recep_fields, decoder_out)
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
+            loss.backward()
+            optimizer.step()
+            # scaler.update()
 
-            epoch_loss += scaler.scale(loss).item()
+            epoch_loss += loss.item()
 
         epoch_loss /= len(training_dataset)
         loss_values.append(epoch_loss)
@@ -109,14 +112,17 @@ def train(
         with torch.no_grad():
             for item in tqdm(validation_dataset):
                 item = item.to(device) / s_factor
+                temp_indices = torch.randperm(item.size(1))[:5000]
+                item = item[:, temp_indices, :]
+
                 knn_points, indices, distances = knn(item, k)
-                geom_feat = compute_geometric_data(item, knn_points, distances)
+                geom_feat = compute_geometric_data(item, knn_points)
                 teacher_out = teacher(item, geom_feat, indices)
 
                 val_sampled_indices = torch.randperm(N)[:16].to(device)
                 val_sampled_features = teacher_out[:, val_sampled_indices, :]
                 val_decoder_out = decoder(val_sampled_features).unsqueeze(0)
-                val_norm_recep_fields = get_two_layer_knn(
+                val_norm_recep_fields = get_receptive_fields(
                     item,
                     num_samples=16,
                     k1=8,
@@ -150,10 +156,16 @@ def train(
 
     # Plot the losses
     plt.plot(loss_values, label="Training Loss")
+    plt.xlabel("Epochs")
+    plt.ylabel("Loss")
+    plt.legend()
+    plt.savefig(f"runs/{exp_name}/train_loss.png")
+    plt.show()
     plt.plot(val_losses, label="Validation Loss")
     plt.xlabel("Epochs")
     plt.ylabel("Loss")
     plt.legend()
+    plt.savefig(f"runs/{exp_name}/val_loss.png")
     plt.show()
 
 
@@ -164,10 +176,12 @@ if __name__ == "__main__":
     weight_decay = 1e-6
     k = 8
     batch_size = 1
-    exp_name = "exp5"
+    exp_name = "test_pretrain1"
 
     # Load the dataset
-    root_path = "datasets/pretrained_dataset/"
+    root_path = (
+        "/home/mewada/Anomaly_Detection_3D/dataset_generation/pretrained_dataset/"
+    )
     train_ = ModelNet10("train", scale=1, root_dir=root_path)
     train_dataset = torch.utils.data.DataLoader(
         train_, batch_size=batch_size, pin_memory=True, shuffle=True

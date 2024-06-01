@@ -16,7 +16,7 @@ from utils.utils import (
     compute_scaling_factor,
     compute_receptive_field_1,
     compute_receptive_fields,
-    get_two_layer_knn,
+    get_receptive_fields,
 )
 from dataloader.dataloader import ModelNet10
 
@@ -96,7 +96,7 @@ def train(
             sampled_features = teacher_out[:, sampled_indices, :]
             # print(sampled_features.shape, "Sampled Features")
             decoder_out = decoder(sampled_features).unsqueeze(0)
-            norm_recep_fields = get_two_layer_knn(
+            norm_recep_fields = get_receptive_fields(
                 item,
                 num_samples=16,
                 k1=8,
@@ -182,7 +182,7 @@ def train(
                 val_sampled_features = teacher_out[:, val_sampled_indices, :]
                 # print(sampled_features.shape, "Sampled Features")
                 val_decoder_out = decoder(val_sampled_features).unsqueeze(0)
-                val_norm_recep_fields = get_two_layer_knn(
+                val_norm_recep_fields = get_receptive_fields(
                     item,
                     num_samples=16,
                     k1=8,

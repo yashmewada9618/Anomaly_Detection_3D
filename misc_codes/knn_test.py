@@ -124,7 +124,7 @@ def compute_scaling_factor(point_cloud, k):
     return s
 
 
-def get_two_layer_knn(points, num_samples, k1, k2, batch_size=50):
+def get_receptive_fields(points, num_samples, k1, k2, batch_size=50):
     """
     Get 2-layer k-nearest neighbors for randomly sampled points from a point cloud.
 
@@ -193,7 +193,7 @@ if __name__ == "__main__":
     # # Print the results
     # print("k-NN Indices:\n", knn_indices[0])
     print("Points shape:", points.shape)
-    output = get_two_layer_knn(points, num_samples=28, k1=8, k2=8, batch_size=128)
+    output = get_receptive_fields(points, num_samples=28, k1=8, k2=8, batch_size=128)
     print("Output shape:", output)
 
     # Visualize the receptive fields points
