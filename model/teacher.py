@@ -1,6 +1,7 @@
 """
 Author: Yash Mewada
 Date: 21st May 2024
+Description: This script contains the teacher model used to learn the feature representations from the pointcloud.
 """
 
 import torch

@@ -1,17 +1,29 @@
+"""
+Author: Yash Mewada
+Date: 25th May 2024
+Description: This script is used to train the student model using the teacher model as a guide.
+"""
+
 import os
 import open3d as o3d
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from torch.cuda.amp import GradScaler, autocast
 from model.teacher import TeacherModel
 from model.student import StudentModel
 from loss.loss import AnomalyScoreLoss
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from dataloader.dataloader import MVTec3DDataset
-from utils.utils import compute_geometric_data, compute_scaling_factor, knn, get_params
+from torch.utils.tensorboard import SummaryWriter
+from utils.utils import (
+    compute_geometric_data,
+    compute_scaling_factor,
+    knn,
+    get_params,
+    Colors,
+)
 
 
 def train(
@@ -27,7 +39,7 @@ def train(
 ):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     torch.cuda.empty_cache()
-    print(f"[+] Using {device} device")
+    print(f"{Colors.MAGENTA}[+] Device: {device}{Colors.RESET}")
 
     teacher = TeacherModel(feature_dim=f_dim).to(device)
     student = StudentModel(f_dim=f_dim).to(device)
@@ -44,7 +56,6 @@ def train(
         )
 
     optimizer = torch.optim.Adam(student.parameters(), lr=lr, weight_decay=weight_decay)
-    scaler = GradScaler()
 
     ######### For Normalization #########
     s_factor = sum(
@@ -53,7 +64,7 @@ def train(
         )
         for item in tqdm(training_dataset)
     ) / len(training_dataset)
-    print(f"[+] S Factor: {s_factor}")
+    print(f"{Colors.MAGENTA}[+] S Factor: {s_factor}{Colors.RESET}")
     with open(f"s_factors/s_factor_{exp_name}.txt", "w") as f:
         f.write(str(s_factor))
 
@@ -64,6 +75,9 @@ def train(
     np.save(f"s_factors/{exp_name}_mu.npy", mu.cpu().numpy())
     np.save(f"s_factors/{exp_name}_sigma.npy", sigma.cpu().numpy())
 
+    writer = SummaryWriter(log_dir=f"runs/{exp_name}")
+
+    ############### Run the training loop ######################
     for epoch in tqdm(range(num_epochs)):
         epoch_loss = 0.0
         teacher.eval()
@@ -88,7 +102,7 @@ def train(
 
         epoch_loss /= len(training_dataset)
         losses.append(epoch_loss)
-        print(f"Epoch {epoch + 1} Loss: {epoch_loss}")
+        writer.add_scalar("Training Loss", epoch_loss, epoch)
 
         # Validation step
         val_loss = 0.0
@@ -107,7 +121,7 @@ def train(
                 val_loss += loss.item()
 
         val_loss /= len(validation_dataset)
-        print(f"Epoch {epoch + 1} Validation Loss: {val_loss}")
+        writer.add_scalar("Validation Loss", val_loss, epoch)
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss

@@ -1,6 +1,7 @@
 """
 Author: Yash Mewada
 Date: 21st May 2024
+Description: This script contains the decoder network used to decode the teacher feature vectors from the pointcloud.
 """
 
 import torch.nn as nn

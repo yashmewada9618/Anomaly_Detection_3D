@@ -1,10 +1,23 @@
 """
 Author: Yash Mewada
 Date: 21st May 2024
+Description: This script contains utility functions used in the training and inference of the teacher and student models.
 """
 
 import torch
 from tqdm import tqdm
+import numpy as np
+
+
+class Colors:
+    RESET = "\033[0m"
+    RED = "\033[91m"
+    GREEN = "\033[92m"
+    YELLOW = "\033[93m"
+    BLUE = "\033[94m"
+    MAGENTA = "\033[95m"
+    CYAN = "\033[96m"
+    WHITE = "\033[97m"
 
 
 def knn(points, k, batch_size=50):
@@ -150,7 +163,53 @@ def compute_scaling_factor(point_cloud, k):
     return s
 
 
+def farthest_point_sampling(point_cloud, num_points):
+    """
+    Perform farthest point sampling on a point cloud.
+
+    Args:
+        point_cloud (np.ndarray): Input point cloud of shape (N, 3), where N is the number of points.
+        num_points (int): Number of points to sample.
+
+    Returns:
+        np.ndarray: Indices of the sampled points.
+    """
+    N, _ = point_cloud.shape
+    sampled_indices = np.zeros(num_points, dtype=int)
+    distances = np.ones(N) * 1e10  # Initialize distances to a large value
+
+    # Randomly choose the first point
+    first_index = np.random.choice(N)
+    sampled_indices[0] = first_index
+    farthest_point = point_cloud[first_index]
+
+    for i in range(1, num_points):
+        # Calculate squared Euclidean distances from the farthest point
+        dist = np.sum((point_cloud - farthest_point) ** 2, axis=1)
+        # Update the distances to keep the minimum distance to the sampled points
+        distances = np.minimum(distances, dist)
+        # Choose the farthest point
+        farthest_index = np.argmax(distances)
+        sampled_indices[i] = farthest_index
+        farthest_point = point_cloud[farthest_index]
+
+    return sampled_indices
+
+
 def get_params(teacher_model, train_data_loader, s):
+    """
+    Compute the mean and standard deviation of the features produced by the teacher model.
+
+    Args:
+        teacher_model (torch.nn.Module): The pretrained teacher model used for feature extraction.
+        train_data_loader (torch.utils.data.DataLoader): DataLoader for the training dataset.
+        s (float): Scaling factor used for normalizing the point cloud data.
+
+    Returns:
+        torch.Tensor: Mean of the extracted features over the entire training set.
+        torch.Tensor: Standard deviation of the extracted features over the entire training set.
+    """
+
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     teacher_model.eval()
     features = []
@@ -160,7 +219,7 @@ def get_params(teacher_model, train_data_loader, s):
             item = item.to(device) / s
             temp_indices = torch.randperm(item.size(1))[:5000]
             item = item[:, temp_indices, :]
-            knn_points, indices, distances = knn(item, k)
+            knn_points, indices, _ = knn(item, k)
             geom_feat = compute_geometric_data(item, knn_points)
             teacher_out = teacher_model(item, geom_feat, indices)
             features.append(teacher_out)

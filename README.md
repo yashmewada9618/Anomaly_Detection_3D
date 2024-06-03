@@ -1,6 +1,16 @@
 # Anomaly_Detection_3D
 An implementation of Anomaly Detection in 3D Point Clouds using Deep Geometric Descriptors by Paul Bergmann and David Sattlegger
 
+## Anomaly Detection Results
+
+The below output is the result of the model trained on the synthetic dataset and tested on the mvtec dataset. The checkpoint file used here are `test_pretrain1` and `test_student1` respectively. Further more the scale factor calculated for the mvtec dataset is `0.003884387259059637` where as the same for ModelNet10 (Synthetic dataset) is `0.026817005398559565`. 
+
+![Anomaly Pointcloud](runs/test_student1/Anomaly_Detection.png)
+![Anomaly Input](runs/test_student1/001.png)
+
+- The points in the yellow color are the anomalies detected by the model. The model rightnow is having a bit of false positives and false negatives. The model can be further trained on more number of points to get better results.
+- The threshold value used in the above case in using the percentile value of the normalised anomaly scores. The threshold value is calculated as `np.percentile(anomaly_scores, 95)`. The threshold value can be further tuned to get better results. This value intuits that the 95% of the points are normal and the rest 5% are anomalies.
+
 ## Getting Started
 
 ```bash
@@ -48,4 +58,6 @@ python3 dataset_generation/mvtec_dataset_generation
 ![Train and Validation Loss](runs/exp3/Teacher_Loss.png)
 
 ## Student loss plots
-![Student Loss](runs/exp3/studentloss.png)
+![Student Loss](runs/test_student1/Loss.png)
+
+

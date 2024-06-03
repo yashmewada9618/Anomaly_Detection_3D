@@ -1,13 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
-import os
-import random
-import numpy as np
-import pymeshlab
-import open3d as o3d
-from tqdm import tqdm
-
 """
 Author: Yash Mewada
 Date: 21st May 2024
@@ -15,6 +5,14 @@ Date: 21st May 2024
 Description: This script is used to generate synthetic data first by scaling, rotating randomly and translating randomly.
             selected 10 sample objects into a unit bounding box using pymeshlab library.
 """
+
+import os
+import random
+import numpy as np
+import pymeshlab
+import open3d as o3d
+from tqdm import tqdm
+from utils.utils import Colors
 
 
 def scale_to_unit_bbox(mesh_path):
@@ -27,14 +25,12 @@ def scale_to_unit_bbox(mesh_path):
     ms = pymeshlab.MeshSet()
     ms.load_new_mesh(mesh_path)
     bb = ms.current_mesh().bounding_box()
-    scaled_factor = 1 / max(bb.dim_x(), bb.dim_y(), bb.dim_z())
 
     # Apply the scale filter
     ms.apply_filter(
         "compute_matrix_from_scaling_or_normalization",
         unitflag=True,
     )
-    # print(f"[+] Scaled by {scaled_factor}")
     return ms
 
 
@@ -64,7 +60,6 @@ def rotate_mesh(ms):
         rotaxis="Z axis",
         angle=rotations[2],
     )
-    # print(f"[+] Rotated by {rotations} degrees")
 
     # Return the rotated mesh
     return ms
@@ -88,7 +83,7 @@ def translate_mesh(ms):
         axisy=translation[1],
         axisz=translation[2],
     )
-    # print(f"[+] Translated by {translation}")
+
     return ms
 
 
@@ -113,7 +108,6 @@ def mesh2pointcloud(mesh, mesh_file, uniform=True):
         else open3d_mesh.sample_points_poisson_disk(number_of_points=5500)
     )
     fps_points = farthest_point_sampling(pcd.points, 16000, pcd_file_path)
-    # o3d.io.write_point_cloud(pcd_file_path, pcd)
 
     return fps_points
 
@@ -185,7 +179,6 @@ def main():
     print(num_train_pcds // len(selected_models))
     # Load, scale and save the selected models
     for model_path in tqdm(selected_models):
-        # print(f"[+] Loading {model_path.split('/')[-1]}")
         scaled_mesh = scale_to_unit_bbox(model_path)
 
         # Generate 500 train point clouds
@@ -197,16 +190,12 @@ def main():
             )
             transformed_mesh.save_current_mesh(filename)
             pcd = mesh2pointcloud(transformed_mesh, filename, uniform=True)
-            # print(
-            #     f"[+] Tranformed and generated train point cloud {os.path.basename(model_path)}_{k}"
-            # )
             train_point_clouds.append(pcd)
 
         save_point_clouds(
             train_point_clouds,
             f"{path_to_train_pcds}{os.path.basename(model_path).replace('.off', '')}",
         )
-        # print(f"[+] Saved {num_train_pcds} train point clouds")
 
         # Generate 25 validation point clouds
         for _ in tqdm(range(num_val_pcds // len(selected_models))):
@@ -217,23 +206,20 @@ def main():
             )
             transformed_mesh.save_current_mesh(filename)
             pcd = mesh2pointcloud(transformed_mesh, filename, uniform=True)
-            # print(
-            #     f"[+] Tranformed and generated val point cloud {os.path.basename(model_path)}_{l}"
-            # )
             val_point_clouds.append(pcd)
 
         save_point_clouds(
             val_point_clouds,
             f"{path_to_val_pcds}{os.path.basename(model_path).replace('.off', '')}",
         )
-        # print(f"[+] Saved {num_val_pcds} validation point clouds")
 
         train_point_clouds = []
         val_point_clouds = []
-        # print(f"[+] Saved {filename}")
         print()
 
-    print("[+] Synthetic Data Generation Completed")
+    print(
+        f"{Colors.MAGENTA}[+] Synthetic Data Generation Completed at {path_to_output_scene}{Colors.RESET}"
+    )
 
 
 if __name__ == "__main__":

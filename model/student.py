@@ -1,9 +1,9 @@
 """
 Author: Yash Mewada
 Date: 21st May 2024
+Description: This script contains the student model used to learn the feature representations from the pointcloud.
 """
 
-import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from model.teacher import TeacherModel

@@ -1,3 +1,9 @@
+"""
+Author: Yash Mewada
+Date: 25th May 2024
+Description: This script is used to train the teacher model using the ModelNet10 dataset.
+"""
+
 from model.teacher import TeacherModel
 from model.decoder import DecoderNetwork
 from loss.loss import ChampherLoss
@@ -6,19 +12,16 @@ import matplotlib.pyplot as plt
 import open3d as o3d
 from tqdm import tqdm
 from dataloader.dataloader import ModelNet10
-from torch.cuda.amp import GradScaler, autocast
+
+# from torch.cuda.amp import GradScaler # Mixed precision training (In testing phase)
 from torch.utils.tensorboard import SummaryWriter
 from utils.utils import (
     compute_geometric_data,
     knn,
     compute_scaling_factor,
     get_receptive_fields,
+    Colors,
 )
-
-"""
-Author: Yash Mewada
-Date: 21st May 2024
-"""
 
 
 def train(
@@ -32,7 +35,7 @@ def train(
     k=8,
 ):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    print(f"[+] Device: {device}")
+    print(f"{Colors.MAGENTA}[+] Device: {device}{Colors.RESET}")
     torch.cuda.empty_cache()
 
     teacher = TeacherModel(feature_dim=f_dim).to(device)
@@ -43,7 +46,6 @@ def train(
         lr=lr,
         weight_decay=weight_decay,
     )
-    scaler = GradScaler()
 
     ######### For Normalization #########
     print(f"[+] Pointcloud size: {training_dataset.dataset[0].size()}")
@@ -53,7 +55,7 @@ def train(
         )
         for item in tqdm(training_dataset)
     ) / len(training_dataset)
-    print(f"[+] S Factor: {s_factor}")
+    print(f"{Colors.MAGENTA}[+] S Factor: {s_factor}{Colors.RESET}")
     with open(f"s_factors/s_factor_{exp_name}.txt", "w") as f:
         f.write(str(s_factor))
 
@@ -77,7 +79,7 @@ def train(
             item = item[:, temp_indices, :]
             B, N, D = item.size()
 
-            # with autocast():
+            # with autocast(): # Mixed precision training (In testing phase)
             knn_points, indices, distances = knn(item, k, batch_size=item.size(1))
             geom_feat = compute_geometric_data(item, knn_points)
             teacher_out = teacher(item, geom_feat, indices)
@@ -103,19 +105,19 @@ def train(
         epoch_loss /= len(training_dataset)
         loss_values.append(epoch_loss)
         writer.add_scalar("Training Loss", epoch_loss, epoch)
-        print(f"Epoch {epoch + 1}, Combined Training Loss: {epoch_loss}")
 
         val_loss = 0.0
         teacher.eval()
         decoder.eval()
 
+        # Validation step
         with torch.no_grad():
             for item in tqdm(validation_dataset):
                 item = item.to(device) / s_factor
                 temp_indices = torch.randperm(item.size(1))[:5000]
                 item = item[:, temp_indices, :]
 
-                knn_points, indices, distances = knn(item, k)
+                knn_points, indices, _ = knn(item, k)
                 geom_feat = compute_geometric_data(item, knn_points)
                 teacher_out = teacher(item, geom_feat, indices)
 
@@ -138,7 +140,6 @@ def train(
         val_loss /= len(validation_dataset)
         val_losses.append(val_loss)
         writer.add_scalar("Validation Loss", val_loss, epoch)
-        print(f"Epoch {epoch + 1}, Validation Loss: {val_loss}")
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
@@ -153,6 +154,7 @@ def train(
             )
 
     writer.close()
+    print(f"{Colors.GREEN}[+] Training completed!{Colors.RESET}")
 
     # Plot the losses
     plt.plot(loss_values, label="Training Loss")
@@ -190,4 +192,7 @@ if __name__ == "__main__":
     val_dataset = torch.utils.data.DataLoader(
         val_, batch_size=batch_size, pin_memory=True, shuffle=False
     )
+
+    print(f"[+] Training on {len(train_dataset)} samples")
+    print(f"[+] Validating on {len(val_dataset)} samples")
     train(train_dataset, val_dataset, f_dim, exp_name, num_epochs, lr, weight_decay, k)
