@@ -40,18 +40,18 @@ class MvTec3D(BaseDataLoader):
 
 
 class MVTec3DDataset(Dataset):
-    def __init__(self, base_dir, split, num_points=16000, resize_shape=(400, 400, 3)):
+    def __init__(self, root_dir, path, num_points=16000, resize_shape=(300, 300, 3)):
         """
         Initializes the MVTec 3D dataset.
 
         Args:
-            base_dir (str): Base directory containing the dataset.
-            split (str): Dataset split to use (e.g., 'train', 'test').
+            root_dir (str): Base directory containing the dataset.
+            path (str): Dataset path to use (e.g., 'train', 'test').
             num_points (int): Number of points to sample from the point cloud.
             resize_shape (tuple): Desired shape to resize the images.
         """
-        self.base_dir = base_dir
-        self.split = split
+        self.root_dir = root_dir
+        self.path = path
         self.num_points = num_points
         self.resize_shape = resize_shape
         self.tiff_files = self._collect_tiff_files()
@@ -64,8 +64,8 @@ class MVTec3DDataset(Dataset):
             list: List of file paths to .tiff files.
         """
         tiff_files = []
-        for category in os.listdir(self.base_dir):
-            xyz_dir = os.path.join(self.base_dir, category, self.split, "good", "xyz")
+        for category in os.listdir(self.root_dir):
+            xyz_dir = os.path.join(self.root_dir, category, self.path, "good", "xyz")
             if os.path.isdir(xyz_dir):
                 tiff_files.extend(
                     os.path.join(xyz_dir, f)

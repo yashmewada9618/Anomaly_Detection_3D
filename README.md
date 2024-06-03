@@ -7,7 +7,7 @@ The below output is the result of the model trained on the synthetic dataset and
 
 <p align="center">
   <img src="runs/test_student1/Anomaly_Detection.png" alt="Plot 1" width="45%">
-  <img src="runs/test_student1/001.png" alt="Plot 2" width="15%">
+  <img src="runs/test_student1/001.png" alt="Plot 2" width="20%">
 </p>
 
 - The points in the yellow color are the anomalies detected by the model. The model rightnow is having a bit of false positives and false negatives. The model can be further trained on more number of points to get better results.
@@ -35,7 +35,7 @@ unzip ModelNet10.zip
 ## Prepare directory structure for mvtec dataset generation
 
 ```bash
-cd Anomaly_Detection_3D/
+cd Anomaly_Detection_3D/datasets
 mkdir -p datasets/MvTec_3D
 curl -S -O https://www.mydrive.ch/shares/45920/dd1eb345346df066c63b5c95676b961b/download/428824485-1643285832/mvtec_3d_anomaly_detection.tar.xz
 tar -xvf mvtec_3d_anomaly_detection.tar.xz -C MvTec_3D/
@@ -61,5 +61,9 @@ python3 dataset_generation/mvtec_dataset_generation
 
 ## Student loss plots
 ![Student Loss](runs/test_student1/Loss.png)
+
+
+## Testing by changing the number of points from 16000 to 13000 (Experimental runs)
+![Change of points](runs/test_pretrain2/Effect_of_pts.png)
 
 

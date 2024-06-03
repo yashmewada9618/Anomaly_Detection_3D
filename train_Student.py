@@ -16,6 +16,10 @@ from loss.loss import AnomalyScoreLoss
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from dataloader.dataloader import MVTec3DDataset
+from torch.cuda.amp import (
+    GradScaler,
+    autocast,
+)  # Mixed precision training (In testing phase)
 from torch.utils.tensorboard import SummaryWriter
 from utils.utils import (
     compute_geometric_data,
@@ -36,6 +40,7 @@ def train(
     lr=1e-3,
     weight_decay=1e-6,
     k=8,
+    chunks=13000,
 ):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     torch.cuda.empty_cache()
@@ -56,11 +61,12 @@ def train(
         )
 
     optimizer = torch.optim.Adam(student.parameters(), lr=lr, weight_decay=weight_decay)
+    scalar = GradScaler()
 
     ######### For Normalization #########
     s_factor = sum(
         compute_scaling_factor(
-            item[:, torch.randperm(item.size(1))[:5000], :].to(device), k
+            item[:, torch.randperm(item.size(1))[:chunks], :].to(device), k
         )
         for item in tqdm(training_dataset)
     ) / len(training_dataset)
@@ -71,7 +77,7 @@ def train(
     best_val_loss = float("inf")
     losses = []
 
-    mu, sigma = get_params(teacher, training_dataset, s_factor)
+    mu, sigma = get_params(teacher, training_dataset, s_factor, chunks)
     np.save(f"s_factors/{exp_name}_mu.npy", mu.cpu().numpy())
     np.save(f"s_factors/{exp_name}_sigma.npy", sigma.cpu().numpy())
 
@@ -84,25 +90,31 @@ def train(
         student.train()
 
         for item in tqdm(training_dataset):
-            item = item.to(device) / s_factor
-            temp_indices = torch.randperm(item.size(1))[:5000]
-            item = item[:, temp_indices, :]
             optimizer.zero_grad()
-            knn_points, indices, _ = knn(item, k)
-            geom_feat = compute_geometric_data(item, knn_points)
-            teacher_out = teacher(item, geom_feat, indices)
-            student_out = student(item, geom_feat, indices)
-            norm_teacher = (teacher_out - mu) / sigma
-            loss = AnomalyScoreLoss()(norm_teacher, student_out)
+            item = item.to(device) / s_factor
 
-            loss.backward()
-            optimizer.step()
+            temp_indices = torch.randperm(item.size(1))[:chunks]
+            item = item[:, temp_indices, :]
+
+            with autocast():
+                knn_points, indices, _ = knn(item, k)
+                geom_feat = compute_geometric_data(item, knn_points)
+                teacher_out = teacher(item, geom_feat, indices).float()
+                student_out = student(item, geom_feat, indices).float()
+                norm_teacher = (teacher_out - mu) / sigma
+                loss = AnomalyScoreLoss()(norm_teacher, student_out)
+
+            scalar.scale(loss).backward()
+            scalar.step(optimizer)
+            scalar.update()
+
             torch.nn.utils.clip_grad_norm_(student.parameters(), max_norm=1.0)
             epoch_loss += loss.item()
 
         epoch_loss /= len(training_dataset)
         losses.append(epoch_loss)
         writer.add_scalar("Training Loss", epoch_loss, epoch)
+        print(f"Epoch: {epoch+1}/{num_epochs} | Loss: {epoch_loss}")
 
         # Validation step
         val_loss = 0.0
@@ -110,18 +122,19 @@ def train(
         with torch.no_grad():
             for item in validation_dataset:
                 item = item.to(device) / s_factor
-                temp_indices = torch.randperm(item.size(1))[:5000]
+                temp_indices = torch.randperm(item.size(1))[:chunks]
                 item = item[:, temp_indices, :]
                 knn_points, indices, _ = knn(item, k)
                 geom_feat = compute_geometric_data(item, knn_points)
-                teacher_out = teacher(item, geom_feat, indices)
-                student_out = student(item, geom_feat, indices)
+                teacher_out = teacher(item, geom_feat, indices).float()
+                student_out = student(item, geom_feat, indices).float()
                 norm_teacher = (teacher_out - mu) / sigma
                 loss = AnomalyScoreLoss()(norm_teacher, student_out)
                 val_loss += loss.item()
 
         val_loss /= len(validation_dataset)
         writer.add_scalar("Validation Loss", val_loss, epoch)
+        print(f"Validation Loss: {val_loss}")
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
@@ -150,14 +163,15 @@ if __name__ == "__main__":
     weight_decay = 1e-5
     k = 8
     batch_size = 1
-    exp_name = "test_student1"
+    chunks = 13000  # chunks for training (just for testing purposes so that we don't run out of memory or wait too long for training to finish)
+    exp_name = "test_student2"
 
     root_path = "datasets/MvTec_3D/"
-    pretrained_teacher_path = "weights/test_pretrain1.pt"
+    pretrained_teacher_path = "weights/test_pretrain2.pt"
 
-    train_dataset = MVTec3DDataset(num_points=16000, base_dir=root_path, split="train")
+    train_dataset = MVTec3DDataset(num_points=16000, root_dir=root_path, path="train")
     val_dataset = MVTec3DDataset(
-        num_points=16000, base_dir=root_path, split="validation"
+        num_points=16000, root_dir=root_path, path="validation"
     )
     train_dataloader = DataLoader(
         train_dataset, batch_size=batch_size, shuffle=True, num_workers=4
@@ -179,4 +193,5 @@ if __name__ == "__main__":
         lr,
         weight_decay,
         k,
+        chunks,
     )

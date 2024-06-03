@@ -196,7 +196,7 @@ def farthest_point_sampling(point_cloud, num_points):
     return sampled_indices
 
 
-def get_params(teacher_model, train_data_loader, s):
+def get_params(teacher_model, train_data_loader, s, chunks=5000):
     """
     Compute the mean and standard deviation of the features produced by the teacher model.
 
@@ -217,7 +217,7 @@ def get_params(teacher_model, train_data_loader, s):
     with torch.no_grad():
         for item in tqdm(train_data_loader):
             item = item.to(device) / s
-            temp_indices = torch.randperm(item.size(1))[:5000]
+            temp_indices = torch.randperm(item.size(1))[:chunks]
             item = item[:, temp_indices, :]
             knn_points, indices, _ = knn(item, k)
             geom_feat = compute_geometric_data(item, knn_points)
