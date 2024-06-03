@@ -1,6 +1,7 @@
 """
 Author: Yash Mewada
 Date: 21st May 2024
+Description: This script contains the loss functions used to train the student and teacher models.
 """
 
 import torch
@@ -80,10 +81,5 @@ class AnomalyScoreLoss(nn.Module):
         Returns:
         - dist: Chamfer distance between the point clouds.
         """
-
-        # return (
-        #     torch.norm(teacher_features - student_features, dim=1).sum()
-        #     / teacher_features.shape[1]
-        # )
 
         return F.mse_loss(teacher_features, student_features)
