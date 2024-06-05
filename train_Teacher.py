@@ -51,10 +51,10 @@ def train(
     print(f"[+] Pointcloud size: {training_dataset.dataset[0].size()}")
     s_factor = sum(
         compute_scaling_factor(
-            item[:, torch.randperm(item.size(1))[:5000], :].to(device), k
+            item[:, torch.randperm(item.size(1))[:13000], :].to(device), k
         )
         for item in tqdm(training_dataset)
-    ) / len(training_dataset)
+    )
     print(f"{Colors.MAGENTA}[+] S Factor: {s_factor}{Colors.RESET}")
     with open(f"s_factors/s_factor_{exp_name}.txt", "w") as f:
         f.write(str(s_factor))
@@ -75,7 +75,7 @@ def train(
             item = item.to(device) / s_factor
 
             # randomly sample 8000 points from the point cloud
-            temp_indices = torch.randperm(item.size(1))[:5000]
+            temp_indices = torch.randperm(item.size(1))[:13000]
             item = item[:, temp_indices, :]
             B, N, D = item.size()
 
@@ -114,7 +114,7 @@ def train(
         with torch.no_grad():
             for item in tqdm(validation_dataset):
                 item = item.to(device) / s_factor
-                temp_indices = torch.randperm(item.size(1))[:5000]
+                temp_indices = torch.randperm(item.size(1))[:13000]
                 item = item[:, temp_indices, :]
 
                 knn_points, indices, _ = knn(item, k)
@@ -178,12 +178,10 @@ if __name__ == "__main__":
     weight_decay = 1e-6
     k = 8
     batch_size = 1
-    exp_name = "test_pretrain1"
+    exp_name = "trial1"
 
     # Load the dataset
-    root_path = (
-        "/home/mewada/Anomaly_Detection_3D/dataset_generation/pretrained_dataset/"
-    )
+    root_path = "datasets/pretrained_dataset/"
     train_ = ModelNet10("train", scale=1, root_dir=root_path)
     train_dataset = torch.utils.data.DataLoader(
         train_, batch_size=batch_size, pin_memory=True, shuffle=True

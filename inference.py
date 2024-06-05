@@ -15,7 +15,7 @@ from utils.utils import compute_geometric_data, knn, farthest_point_sampling, Co
 
 def get_anomaly_scores(teacher, student, point_cloud, exp_name):
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     mu = torch.tensor(np.load(f"s_factors/{exp_name}_mu.npy")).to(device)
     sigma = torch.tensor(np.load(f"s_factors/{exp_name}_sigma.npy")).to(device)
     s_factor = torch.tensor(np.genfromtxt(f"s_factors/s_factor_{exp_name}.txt")).to(
@@ -40,7 +40,7 @@ def get_anomaly_scores(teacher, student, point_cloud, exp_name):
     )
     print(f"[+] Anomaly scores: {anomaly_scores_normalized[0]}")
     print(f"[+] Anomaly scores shape: {anomaly_scores_normalized.shape}")
-    return anomaly_scores_normalized[0]
+    return anomaly_scores_normalized
 
 
 def get_point_cloud(tiff_path, num_points=5000):
@@ -78,10 +78,10 @@ def visualize_anomaly(
 
 
 if __name__ == "__main__":
-    teacher_model_path = "weights/test_pretrain1.pt"
-    student_model_path = "weights/test_student1.pt"
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+    exp_name = "test_student2"
+    teacher_model_path = "weights/test_pretrain2.pt"
+    student_model_path = f"weights/{exp_name}.pt"
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     torch.cuda.empty_cache()
 
     teacher = TeacherModel(feature_dim=64).to(device)
@@ -89,13 +89,16 @@ if __name__ == "__main__":
 
     student = StudentModel(f_dim=64).to(device)
     student.load_state_dict(torch.load(student_model_path)["student"])
+    print(
+        f"[+] Loaded teacher and student models from {teacher_model_path} and {student_model_path}"
+    )
 
     root_path = "datasets/mvtec_point_clouds/"
-    exp_name = "test_student1"
 
     tiff_path = "datasets/MvTec_3D/carrot/test/crack/xyz/001.tiff"
-    point_cloud = get_point_cloud(tiff_path)
+    point_cloud = get_point_cloud(tiff_path, num_points=13000)
     point_cloud = torch.tensor(point_cloud, dtype=torch.float32).to(device)
+    print(f"[+] Point cloud shape: {point_cloud.shape}")
 
     anomaly_scores = get_anomaly_scores(
         teacher, student, point_cloud, exp_name=exp_name

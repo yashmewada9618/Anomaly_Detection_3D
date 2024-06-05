@@ -12,7 +12,9 @@ import numpy as np
 import pymeshlab
 import open3d as o3d
 from tqdm import tqdm
-from utils.utils import Colors
+from collections import defaultdict
+
+# from utils.utils import Colors
 
 
 def scale_to_unit_bbox(mesh_path):
@@ -155,6 +157,46 @@ def save_point_clouds(pcds, path):
         o3d.io.write_point_cloud(f"{path}_{i}.pcd", pcd)
 
 
+def sample_unique_files(models, num_samples):
+    """Sample unique files ensuring each category is represented.
+
+    Args:
+        models: List of paths to the OFF files
+        num_samples: Number of samples to select
+
+    Returns:
+        List of sampled file paths
+    """
+    # Group the files by their category
+    category_to_files = defaultdict(list)
+    for file_path in models:
+        category = file_path.split("/")[-3]  # Extract category from path
+        category_to_files[category].append(file_path)
+
+    # Ensure there are enough categories to sample from
+    categories = list(category_to_files.keys())
+    if num_samples > len(categories):
+        raise ValueError("Number of samples exceeds the number of unique categories.")
+
+    # Sample one file from each category
+    sampled_files = []
+    for category in categories:
+        sampled_files.append(np.random.choice(category_to_files[category]))
+
+    # If more samples are needed, sample the remaining from the entire set without duplicates
+    if num_samples > len(sampled_files):
+        remaining_samples = num_samples - len(sampled_files)
+        all_files = [file for sublist in category_to_files.values() for file in sublist]
+        additional_samples = np.random.choice(
+            [file for file in all_files if file not in sampled_files],
+            remaining_samples,
+            replace=False,
+        )
+        sampled_files.extend(additional_samples)
+
+    return sampled_files
+
+
 def main():
     base_dir = "datasets/ModelNet10/"  # Path to the ModelNet10 directory
     path_to_output_scene = (
@@ -169,7 +211,8 @@ def main():
     models = load_modelnet10_models(base_dir)
 
     # Randomly select 10 models
-    selected_models = random.sample(models, 10)
+    selected_models = sample_unique_files(models, 10)
+
     train_point_clouds = []
     val_point_clouds = []
 
@@ -217,9 +260,9 @@ def main():
         val_point_clouds = []
         print()
 
-    print(
-        f"{Colors.MAGENTA}[+] Synthetic Data Generation Completed at {path_to_output_scene}{Colors.RESET}"
-    )
+    # print(
+    #     f"{Colors.MAGENTA}[+] Synthetic Data Generation Completed at {path_to_output_scene}{Colors.RESET}"
+    # )
 
 
 if __name__ == "__main__":
