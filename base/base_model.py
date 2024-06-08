@@ -4,7 +4,6 @@ Date: 21st May 2024
 """
 
 import numpy as np
-import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from abc import abstractmethod

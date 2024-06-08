@@ -2,3 +2,4 @@ numpy
 open3d
 torch
 pymeshlab
+tqdm

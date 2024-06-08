@@ -5,7 +5,6 @@ Description: This script is used to train the student model using the teacher mo
 """
 
 import os
-import open3d as o3d
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
@@ -180,10 +179,7 @@ if __name__ == "__main__":
         val_dataset, batch_size=batch_size, shuffle=True, num_workers=4
     )
 
-    print(f"[+] Training on {len(train_dataset)} samples")
-    print(f"[+] Validating on {len(val_dataset)} samples")
-
-    train(
+    params = (
         pretrained_teacher_path,
         train_dataloader,
         val_dataloader,
@@ -195,3 +191,8 @@ if __name__ == "__main__":
         k,
         chunks,
     )
+
+    print(f"[+] Training on {len(train_dataset)} samples")
+    print(f"[+] Validating on {len(val_dataset)} samples")
+
+    train(*params)

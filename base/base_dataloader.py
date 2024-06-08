@@ -11,9 +11,6 @@ from torch.utils.data.sampler import SubsetRandomSampler
 import pandas as pd
 import os
 import glob
-
-# import io
-from skimage import io
 from abc import abstractmethod
 
 

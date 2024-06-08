@@ -7,14 +7,15 @@ Description: This script is used to generate synthetic data first by scaling, ro
 """
 
 import os
-import random
 import numpy as np
 import pymeshlab
 import open3d as o3d
 from tqdm import tqdm
-from collections import defaultdict
+import sys
 
-# from utils.utils import Colors
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from utils.utils import Colors
+from collections import defaultdict
 
 
 def scale_to_unit_bbox(mesh_path):
@@ -260,9 +261,9 @@ def main():
         val_point_clouds = []
         print()
 
-    # print(
-    #     f"{Colors.MAGENTA}[+] Synthetic Data Generation Completed at {path_to_output_scene}{Colors.RESET}"
-    # )
+    print(
+        f"{Colors.MAGENTA}[+] Synthetic Data Generation Completed at {path_to_output_scene}{Colors.RESET}"
+    )
 
 
 if __name__ == "__main__":

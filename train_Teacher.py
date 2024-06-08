@@ -13,7 +13,10 @@ import open3d as o3d
 from tqdm import tqdm
 from dataloader.dataloader import ModelNet10
 
-# from torch.cuda.amp import GradScaler # Mixed precision training (In testing phase)
+from torch.cuda.amp import (
+    GradScaler,
+    autocast,
+)  # Mixed precision training (In testing phase)
 from torch.utils.tensorboard import SummaryWriter
 from utils.utils import (
     compute_geometric_data,
@@ -33,6 +36,7 @@ def train(
     lr=1e-3,
     weight_decay=1e-6,
     k=8,
+    chunks=5000,
 ):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print(f"{Colors.MAGENTA}[+] Device: {device}{Colors.RESET}")
@@ -51,10 +55,10 @@ def train(
     print(f"[+] Pointcloud size: {training_dataset.dataset[0].size()}")
     s_factor = sum(
         compute_scaling_factor(
-            item[:, torch.randperm(item.size(1))[:13000], :].to(device), k
+            item[:, torch.randperm(item.size(1))[:chunks], :].to(device), k
         )
         for item in tqdm(training_dataset)
-    )
+    ) / len(training_dataset)
     print(f"{Colors.MAGENTA}[+] S Factor: {s_factor}{Colors.RESET}")
     with open(f"s_factors/s_factor_{exp_name}.txt", "w") as f:
         f.write(str(s_factor))
@@ -63,6 +67,7 @@ def train(
     loss_values = []
     val_losses = []
     writer = SummaryWriter(log_dir=f"runs/{exp_name}")
+    scaler = GradScaler()
 
     ############### Run the training loop ######################
     for epoch in tqdm(range(num_epochs)):
@@ -75,14 +80,15 @@ def train(
             item = item.to(device) / s_factor
 
             # randomly sample 8000 points from the point cloud
-            temp_indices = torch.randperm(item.size(1))[:13000]
+            temp_indices = torch.randperm(item.size(1))[:chunks]
             item = item[:, temp_indices, :]
             B, N, D = item.size()
 
             # with autocast(): # Mixed precision training (In testing phase)
-            knn_points, indices, distances = knn(item, k, batch_size=item.size(1))
+            knn_points, indices, _ = knn(item, k, batch_size=item.size(1))
             geom_feat = compute_geometric_data(item, knn_points)
             teacher_out = teacher(item, geom_feat, indices)
+
             # Randomly sample points
             sampled_indices = torch.randperm(N)[:16].to(device)
             sampled_features = teacher_out[:, sampled_indices, :]
@@ -114,7 +120,7 @@ def train(
         with torch.no_grad():
             for item in tqdm(validation_dataset):
                 item = item.to(device) / s_factor
-                temp_indices = torch.randperm(item.size(1))[:13000]
+                temp_indices = torch.randperm(item.size(1))[:chunks]
                 item = item[:, temp_indices, :]
 
                 knn_points, indices, _ = knn(item, k)
@@ -178,7 +184,8 @@ if __name__ == "__main__":
     weight_decay = 1e-6
     k = 8
     batch_size = 1
-    exp_name = "trial1"
+    exp_name = "amp1"
+    chunks = 5000
 
     # Load the dataset
     root_path = "datasets/pretrained_dataset/"
@@ -191,6 +198,18 @@ if __name__ == "__main__":
         val_, batch_size=batch_size, pin_memory=True, shuffle=False
     )
 
+    params = (
+        train_dataset,
+        val_dataset,
+        f_dim,
+        exp_name,
+        num_epochs,
+        lr,
+        weight_decay,
+        k,
+        chunks,
+    )
+
     print(f"[+] Training on {len(train_dataset)} samples")
     print(f"[+] Validating on {len(val_dataset)} samples")
-    train(train_dataset, val_dataset, f_dim, exp_name, num_epochs, lr, weight_decay, k)
+    train(*params)
