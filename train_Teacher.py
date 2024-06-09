@@ -52,7 +52,7 @@ def train(
     )
 
     ######### For Normalization #########
-    print(f"[+] Pointcloud size: {training_dataset.dataset[0].size()}")
+    print(f"[+] Using {chunks} points out of {training_dataset.dataset[0].size()}")
     s_factor = sum(
         compute_scaling_factor(
             item[:, torch.randperm(item.size(1))[:chunks], :].to(device), k
@@ -84,33 +84,48 @@ def train(
             item = item[:, temp_indices, :]
             B, N, D = item.size()
 
-            # with autocast(): # Mixed precision training (In testing phase)
-            knn_points, indices, _ = knn(item, k, batch_size=item.size(1))
-            geom_feat = compute_geometric_data(item, knn_points)
-            teacher_out = teacher(item, geom_feat, indices)
+            with autocast():  # Mixed precision training
+                knn_points, indices, _ = knn(item, k, batch_size=item.size(1))
+                geom_feat = compute_geometric_data(item, knn_points)
+                teacher_out = teacher(item, geom_feat, indices)
 
-            # Randomly sample points
-            sampled_indices = torch.randperm(N)[:16].to(device)
-            sampled_features = teacher_out[:, sampled_indices, :]
-            decoder_out = decoder(sampled_features).unsqueeze(0)
-            norm_recep_fields = get_receptive_fields(
-                item,
-                num_samples=16,
-                k1=8,
-                k2=8,
-                sampled_indices=sampled_indices,
-                batch_size=item.size(1),
-            ).to(device)
-            loss = ChampherLoss()(norm_recep_fields, decoder_out)
-            loss.backward()
-            optimizer.step()
+                # Ensure critical parts run in FP32
+                with torch.cuda.amp.autocast(enabled=False):
+                    teacher_out = teacher_out.float()
+
+                sampled_indices = torch.randperm(N)[:16].to(device)
+                sampled_features = teacher_out[:, sampled_indices, :].float()
+                decoder_out = decoder(sampled_features).unsqueeze(0).float()
+                norm_recep_fields = (
+                    get_receptive_fields(
+                        item,
+                        num_samples=16,
+                        k1=8,
+                        k2=8,
+                        sampled_indices=sampled_indices,
+                        batch_size=item.size(1),
+                    )
+                    .to(device)
+                    .float()
+                )
+                loss = ChampherLoss()(norm_recep_fields, decoder_out)
+
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+            # loss.backward()
+            # optimizer.step()
             # scaler.update()
 
             epoch_loss += loss.item()
+            torch.nn.utils.clip_grad_norm_(teacher.parameters(), max_norm=1.0)
 
         epoch_loss /= len(training_dataset)
         loss_values.append(epoch_loss)
         writer.add_scalar("Training Loss", epoch_loss, epoch)
+        print(
+            f"{Colors.CYAN}[+] Epoch: {epoch+1}/{num_epochs}, Loss: {epoch_loss}{Colors.RESET}"
+        )
 
         val_loss = 0.0
         teacher.eval()
@@ -126,6 +141,10 @@ def train(
                 knn_points, indices, _ = knn(item, k)
                 geom_feat = compute_geometric_data(item, knn_points)
                 teacher_out = teacher(item, geom_feat, indices)
+
+                # Ensure critical parts run in FP32
+                with torch.cuda.amp.autocast(enabled=False):
+                    teacher_out = teacher_out.float()
 
                 val_sampled_indices = torch.randperm(N)[:16].to(device)
                 val_sampled_features = teacher_out[:, val_sampled_indices, :]
